@@ -44,7 +44,7 @@ def tree_slice(tree, slc):
 
 class DataPipeline:
     """
-    Creates a data pipeline object used to itterate through the MineRL-v0 dataset
+    Creates a data pipeline object used to iterate through the MineRL-v0 dataset
     """
 
     def __init__(self,
@@ -53,7 +53,8 @@ class DataPipeline:
                  num_workers: int,
                  worker_batch_size: int,
                  min_size_to_dequeue: int,
-                 random_seed=42):
+                 random_seed=42,
+                 max_recordings=None):
         """
         Sets up a tensorflow dataset to load videos from a given data directory.
         :param data_directory:
@@ -73,6 +74,7 @@ class DataPipeline:
         self.worker_batch_size = worker_batch_size
         self.size_to_dequeue = min_size_to_dequeue
         self.processing_pool = multiprocessing.Pool(self.number_of_workers)
+        self.max_recordings = max_recordings
 
         self._env_spec = gym.envs.registration.spec(self.environment)._kwargs['env_spec']
         self._action_space = gym.envs.registration.spec(self.environment)._kwargs['action_space']
@@ -100,7 +102,7 @@ class DataPipeline:
 
     def load_data(self, stream_name: str, skip_interval=0, include_metadata=False):
         """Iterates over an individual trajectory named stream_name.
-        
+
         Args:
             stream_name (str): The stream name desired to be iterated through.
             skip_interval (int, optional): How many sices should be skipped.. Defaults to 0.
@@ -124,7 +126,7 @@ class DataPipeline:
             observation_seq, action_seq, reward_seq, next_observation_seq, done_seq, meta = seq
         else:
             observation_seq, action_seq, reward_seq, next_observation_seq, done_seq = seq
-        # make a copty  
+        # make a copty
         gym_spec = gym.envs.registration.spec(self.environment)
         target_space = copy.deepcopy(gym_spec._kwargs['observation_space'])
 
@@ -146,11 +148,11 @@ class DataPipeline:
 
     def get_trajectory_names(self):
         """Gets all the trajectory names
-        
+
         Returns:
             A list of experiment names: [description]
         """
-        return [os.path.basename(x) for x in self._get_all_valid_recordings(self.data_dir)]
+        return [os.path.basename(x) for x in self._get_all_valid_recordings(self.data_dir, self.max_recordings)]
 
     ############################
     #     PRIVATE METHODS      #
@@ -362,7 +364,7 @@ class DataPipeline:
                    include_metadata: bool = False):
         """Returns batches of sequences length SEQ_LEN of the data of size BATCH_SIZE.
         The iterator produces batches sequentially. If an element of a batch reaches the
-        end of its 
+        end of its
 
 
         Args:
@@ -391,7 +393,7 @@ class DataPipeline:
                         done=d
                     )
 
-            jobs = [(f, -1, None) for f in self._get_all_valid_recordings(self.data_dir)]
+            jobs = [(f, -1, None) for f in self._get_all_valid_recordings(self.data_dir, self.max_recordings)]
             np.random.shuffle(jobs)
             trajectory_loader = minerl.data.util.OrderedJobStreamer(
                 job,
@@ -418,7 +420,7 @@ class DataPipeline:
         return False
 
     @staticmethod
-    def _get_all_valid_recordings(path):
+    def _get_all_valid_recordings(path, max_recordings=None):
         directoryList = []
 
         # return nothing if path is a file
@@ -429,7 +431,7 @@ class DataPipeline:
         if DataPipeline._is_blacklisted(path):
             return []
 
-        # add dir to directory list if it contains .txt files
+        # add dir to directory list if it contains .mp4 and .npz files
         if len([f for f in os.listdir(path) if f.endswith('.mp4')]) > 0:
             if len([f for f in os.listdir(path) if f.endswith('.npz')]) > 0:
                 assert_prefix(path)
@@ -438,10 +440,12 @@ class DataPipeline:
         for d in os.listdir(path):
             new_path = os.path.join(path, d)
             if os.path.isdir(new_path):
-                directoryList += DataPipeline._get_all_valid_recordings(new_path)
+                directoryList += DataPipeline._get_all_valid_recordings(new_path, max_recordings)
 
         directoryList = np.array(directoryList)
         np.random.shuffle(directoryList)
+        if max_recordings is not None:
+            directoryList = directoryList[:max_recordings]
         return directoryList.tolist()
 
     ###
@@ -463,7 +467,7 @@ class DataPipeline:
         tuples in the dataset.
         Loads num_workers files at once as defined in minerl.data.make() and return up to
         max_sequence_len consecutive samples wrapped in a dict observation space
-        
+
         Args:
             num_epochs (int, optional): number of epochs to iterate over or -1
                 to loop forever. Defaults to -1
