@@ -126,7 +126,7 @@ class DataPipeline:
             observation_seq, action_seq, reward_seq, next_observation_seq, done_seq, meta = seq
         else:
             observation_seq, action_seq, reward_seq, next_observation_seq, done_seq = seq
-        # make a copty
+        # make a copy
         gym_spec = gym.envs.registration.spec(self.environment)
         target_space = copy.deepcopy(gym_spec._kwargs['observation_space'])
 
