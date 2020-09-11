@@ -394,7 +394,7 @@ class DataPipeline:
                     )
 
             jobs = [(f, -1, None) for f in self._get_all_valid_recordings(self.data_dir, self.max_recordings)]
-            print(f"DataPipeline.batch_iter processing {len(jobs)} jobs")
+            logger.info(f"DataPipeline.batch_iter processing {len(jobs)} jobs")
             np.random.shuffle(jobs)
             trajectory_loader = minerl.data.util.OrderedJobStreamer(
                 job,
