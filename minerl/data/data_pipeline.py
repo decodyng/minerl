@@ -441,7 +441,11 @@ class DataPipeline:
         for d in os.listdir(path):
             new_path = os.path.join(path, d)
             if os.path.isdir(new_path):
-                directoryList += DataPipeline._get_all_valid_recordings(new_path, max_recordings)
+                # Calling with max_recordings=None here, even if max_recordings is passed in,
+                # so that we shuffle and then subset-sample all recordings with equal probability
+                # rather than having higher likelihood of sampling recordings situated in directories
+                # with less than `max_recordings` recordings inside them
+                directoryList += DataPipeline._get_all_valid_recordings(new_path, max_recordings=None)
 
         directoryList = np.array(directoryList)
         np.random.shuffle(directoryList)
