@@ -30,7 +30,7 @@ def make(environment=None, data_dir=None, num_workers=4, worker_batch_size=32, m
             print("Provided data directory does not exist: ", data_dir)
             data_dir = download(data_dir)
         else:
-            raise FileNotFoundError("Provided data directory does not exist. "
+            raise FileNotFoundError("Provided data directory does not exist. ", data_dir,
                                     "Specify force_download=True to download default dataset")
     elif data_dir is None:
         if force_download:
