@@ -378,7 +378,7 @@ class DataPipeline:
         Returns:
             Generator: A generator that yields (sarsd) batches
         """
-        assert epoch_size > 0
+        assert epoch_size is None or epoch_size > 0
         # Todo: Not implemented/
         input_queue = multiprocessing.Queue()
         trajectory_queue = multiprocessing.Queue(maxsize=preload_buffer_size)
