@@ -434,7 +434,7 @@ class MineRLEnv(gym.Env):
                 else:
                     assert isinstance(
                         action_in[act], str), "Enum action {} must be str or int. Value observed: {} ".format(act, action_in[act])
-                    assert action_in[act] in self.action_space.spaces[act].values, \
+                    assert action_in[act] in bottom_env_spec.action_space.spaces[act].values, \
                         "Invalid string value for enum action {}, {}".format(act, action_in[act])
             elif isinstance(bottom_env_spec.action_space.spaces[act], gym.spaces.Box):
                 subact = action_in[act]
