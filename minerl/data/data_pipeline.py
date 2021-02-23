@@ -8,7 +8,7 @@ import os
 import time
 from collections import OrderedDict
 from queue import PriorityQueue, Empty
-from typing import List, Tuple, Any
+from typing import List, Tuple, Any, Optional
 from itertools import cycle, islice
 import minerl.herobraine.env_spec
 from minerl.herobraine.hero import spaces
@@ -54,8 +54,7 @@ class DataPipeline:
                  num_workers: int,
                  worker_batch_size: int,
                  min_size_to_dequeue: int,
-                 random_seed=42,
-                 max_recordings=None):
+                 random_seed=42):
         """
         Sets up a tensorflow dataset to load videos from a given data directory.
         :param data_directory:
@@ -75,7 +74,6 @@ class DataPipeline:
         self.worker_batch_size = worker_batch_size
         self.size_to_dequeue = min_size_to_dequeue
         self.processing_pool = multiprocessing.Pool(self.number_of_workers)
-        self.max_recordings = max_recordings
 
         self._env_spec = gym.envs.registration.spec(self.environment)._kwargs['env_spec']
         self._action_space = gym.envs.registration.spec(self.environment)._kwargs['action_space']
@@ -361,6 +359,7 @@ class DataPipeline:
                    seq_len: int,
                    num_epochs: int = -1,
                    preload_buffer_size: int = 2,
+                   epoch_size: Optional[int] = None,
                    seed: int = None,
                    include_metadata: bool = False):
         """Returns batches of sequences length SEQ_LEN of the data of size BATCH_SIZE.
@@ -379,6 +378,7 @@ class DataPipeline:
         Returns:
             Generator: A generator that yields (sarsd) batches
         """
+        assert epoch_size is None or epoch_size > 0
         # Todo: Not implemented/
         input_queue = multiprocessing.Queue()
         trajectory_queue = multiprocessing.Queue(maxsize=preload_buffer_size)
@@ -405,9 +405,14 @@ class DataPipeline:
                         done=d
                     )
 
-            jobs = [(f, -1, None) for f in self._get_all_valid_recordings(self.data_dir, self.max_recordings)]
-            logger.info("DataPipeline.batch_iter processing {num_jobs:n} jobs".format(num_jobs=len(jobs)))
+
+            jobs = [(f, -1, None)
+                    for f in self._get_all_valid_recordings(self.data_dir)]
+            if epoch_size is not None and len(jobs) < epoch_size:
+                raise ValueError("Set epoch size to {epoch_size} "
+                                 " but there are only {len(jobs)} jobs available.")
             np.random.shuffle(jobs)
+            jobs = jobs[:epoch_size]
             for job in jobs:
                 input_queue.put(job)
 

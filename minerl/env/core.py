@@ -36,7 +36,7 @@ import gym.envs.registration
 import gym.spaces
 import numpy as np
 from lxml import etree
-from minerl.env import comms
+from minerl.env import comms, malmo
 from minerl.env.comms import retry
 from minerl.env.malmo import InstanceManager, malmo_version, launch_queue_logger_thread
 
@@ -134,7 +134,7 @@ class MineRLEnv(gym.Env):
         self._is_real_time = False
         self._last_step_time = -1
         self._already_closed = False
-        self.instance = self._get_new_instance(port)
+        self.instance = self._robust_get_new_instance(port)
         self.env_spec = env_spec
 
         self.observation_space = observation_space
@@ -156,8 +156,35 @@ class MineRLEnv(gym.Env):
         if InstanceManager.is_remote():
             launch_queue_logger_thread(instance, self.is_closed)
 
-        instance.launch()
         return instance
+
+    def _robust_get_new_instance(self, port=None, instance_id=None, max_tries=3,
+                                 ) -> InstanceManager:
+        """Launch and return a new InstanceManager.
+
+        Attempt up to `max_tries` times in face of known Gradle race condition.."""
+        InstanceManager().shutdown()
+        for i in range(max_tries):
+            instance = self._get_new_instance(port=port, instance_id=instance_id)
+            try:
+                instance.launch()
+            except malmo.IntermittentBuildError:
+                instance.kill()
+                instance = None
+
+            if instance is not None:
+                return instance
+            else:
+                log_str = (
+                    "Minecraft build or launch just failed on attempt {j}/{max_tries}."
+                    "This is probably an intermittent race condition. "
+                    "Trying again (max tries {max_tries})."
+                ).format(j=i+1, max_tries=max_tries)
+                logger.warning(log_str)
+                time.sleep(2)
+
+        raise RuntimeError(f"Failed to build and launch Minecraft instance "
+                           f"{max_tries} times. Giving up.")
 
     def init(self):
         """Initializes the MineRL Environment.
@@ -236,6 +263,15 @@ class MineRLEnv(gym.Env):
         self.xml = e
         self.xml.find(self.ns + 'ClientRole').text = str(self.role)
         self.xml.find(self.ns + 'ExperimentUID').text = self.exp_uid
+        file_world_generator = self.xml.find('.//' + self.ns + 'FileWorldGenerator')
+        if file_world_generator is not None:
+            fileworld_path = file_world_generator.attrib['src']
+            if not os.path.isabs(fileworld_path):
+                # If the path for the FileWorldGenerator is a relative path,
+                # assume it to be relative to the xml file itself
+                xml_directory = os.path.dirname(self.xml_file)
+                new_fileworld_path = os.path.join(xml_directory, fileworld_path)
+                self.xml.find('.//' + self.ns + 'FileWorldGenerator').attrib['src'] = new_fileworld_path
         if self.role != 0 and self.agent_count > 1:
             e = etree.Element(self.ns + 'MinecraftServerConnection',
                               attrib={'address': self.instance.host,
@@ -393,15 +429,13 @@ class MineRLEnv(gym.Env):
         for act in action_in:
             # Process enums.
             if isinstance(bottom_env_spec.action_space.spaces[act], spaces.Enum):
-                if isinstance(action_in[act],   int):
+                if np.issubdtype(type(action_in[act]), np.integer):
                     action_in[act] = bottom_env_spec.action_space.spaces[act].values[action_in[act]]
                 else:
                     assert isinstance(
-                        action_in[act], str), "Enum action {} must be str or int".format(act)
-                    assert action_in[act] in bottom_env_spec.action_space.spaces[
-                        act].values, "Invalid value for enum action {}, {}".format(
-                        act, action_in[act])
-
+                        action_in[act], str), "Enum action {} must be str or int. Value observed: {} ".format(act, action_in[act])
+                    assert action_in[act] in bottom_env_spec.action_space.spaces[act].values, \
+                        "Invalid string value for enum action {}, {}".format(act, action_in[act])
             elif isinstance(bottom_env_spec.action_space.spaces[act], gym.spaces.Box):
                 subact = action_in[act]
                 assert not isinstance(
@@ -537,7 +571,8 @@ class MineRLEnv(gym.Env):
             if self.instance:
                 self.instance.kill()
             
-            self.instance = self._get_new_instance(instance_id=self.instance.instance_id)
+            self.instance = self._robust_get_new_instance(
+                instance_id=self.instance.instance_id)
 
             self.had_to_clean = False
         else:
