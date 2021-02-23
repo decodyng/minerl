@@ -151,7 +151,7 @@ class DataPipeline:
         Returns:
             A list of experiment names: [description]
         """
-        return [os.path.basename(x) for x in self._get_all_valid_recordings(self.data_dir, self.max_recordings)]
+        return [os.path.basename(x) for x in self._get_all_valid_recordings(self.data_dir)]
 
     ############################
     #     PRIVATE METHODS      #
